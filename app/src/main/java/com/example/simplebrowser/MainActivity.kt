@@ -241,6 +241,16 @@ class MainActivity : Activity() {
                     return true
                 }
             }
+            // TV 포커스 모드: 방향키로 화면의 선택 가능한 항목 이동, OK로 선택
+            if (!mouseMode && event.repeatCount == 0) {
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP -> { webView.evaluateJavascript("window.__tvFocus&&window.__tvFocus.move('up')", null); return true }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> { webView.evaluateJavascript("window.__tvFocus&&window.__tvFocus.move('down')", null); return true }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> { webView.evaluateJavascript("window.__tvFocus&&window.__tvFocus.move('left')", null); return true }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> { webView.evaluateJavascript("window.__tvFocus&&window.__tvFocus.move('right')", null); return true }
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { webView.evaluateJavascript("window.__tvFocus&&window.__tvFocus.click()", null); return true }
+                }
+            }
             if (mouseMode) {
                 when (event.keyCode) {
                     KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { scrollMode = !scrollMode; cursorView?.visibility = if (scrollMode) View.GONE else View.VISIBLE; Toast.makeText(this, if (scrollMode) "스크롤 모드 · 방향키 위/아래로 이동" else "커서 모드 · 방향키로 커서 이동", Toast.LENGTH_SHORT).show(); return true }
@@ -560,6 +570,48 @@ class MainActivity : Activity() {
 
 
         // 재생 컨트롤 유지를 위한 가상 마우스 이동 (접근 가능한 모든 문서의 video 대상)
+        // TV remote focus navigation
+        private val TV_FOCUS_JS = """
+(function(){
+ if(window.__tvFocusInstalled)return;window.__tvFocusInstalled=1;
+ var style=document.createElement('style');
+ style.textContent='.__tvFocusOn{outline:4px solid #fff!important;outline-offset:4px!important;box-shadow:0 0 0 7px rgba(0,160,255,.65)!important;transform:scale(1.035);z-index:99999!important;}';
+ document.head.appendChild(style);
+ function candidates(){
+  var sel='a,button,[role=button],[role=link],input,select,textarea,video,[tabindex],img';
+  return Array.from(document.querySelectorAll(sel)).filter(function(e){
+   if(e.disabled||e.getAttribute('aria-hidden')==='true')return false;
+   var r=e.getBoundingClientRect(),s=getComputedStyle(e);
+   return r.width>25&&r.height>20&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0';
+  }).map(function(e){var r=e.getBoundingClientRect();return {e:e,x:r.left+r.width/2,y:r.top+r.height/2,r:r};});
+ }
+ var current=null;
+ function set(e){
+  if(current)current.classList.remove('__tvFocusOn');
+  current=e;if(!current)return;
+  current.classList.add('__tvFocusOn');
+  try{current.focus({preventScroll:true});}catch(_){current.focus();}
+  var r=current.getBoundingClientRect();
+  if(r.top<0||r.bottom>innerHeight||r.left<0||r.right>innerWidth)current.scrollIntoView({block:'center',inline:'center'});
+ }
+ function move(dir){
+  var all=candidates();if(!all.length)return;
+  var cur=all.find(function(o){return o.e===current;});
+  if(!cur){all.sort(function(a,b){return a.y-b.y||a.x-b.x;});set(all[0].e);return;}
+  var dx=dir==='left'?-1:dir==='right'?1:0,dy=dir==='up'?-1:dir==='down'?1:0;
+  var best=null,bscore=1e12;
+  all.forEach(function(o){if(o.e===current)return;var vx=o.x-cur.x,vy=o.y-cur.y;
+   if((dx&&vx*dx<=0)||(dy&&vy*dy<=0))return;
+   var primary=Math.abs(dx?vx:vy),secondary=Math.abs(dx?vy:vx);
+   var score=primary+secondary*2.4;
+   if(score<bscore){bscore=score;best=o;}
+  });
+  if(best)set(best.e);
+ }
+ function click(){if(!current){move('right');return;}try{current.click();}catch(_){}}
+ window.__tvFocus={move:move,click:click};
+})();
+"""
         private val CONTROL_JS = """
 (function(){
   if (window.__ctlPing) return;
@@ -815,7 +867,7 @@ class MainActivity : Activity() {
                     favicon: android.graphics.Bitmap?
                 ) {
                     addressBar.setText(url)
-                    view.evaluateJavascript(AD_BLOCK_JS + HEADER_JS + GAP_JS + NAV_JS + FOOTER_JS + TAB_JS + CONTROL_JS, null)
+                    view.evaluateJavascript(AD_BLOCK_JS + HEADER_JS + GAP_JS + NAV_JS + FOOTER_JS + TAB_JS + TV_FOCUS_JS + CONTROL_JS, null)
                     this@MainActivity.progress.visibility = View.VISIBLE
                     this@MainActivity.progress.progress = 5
                 }
@@ -827,7 +879,7 @@ class MainActivity : Activity() {
                         retryCount = 0
                         view.postDelayed({ hideSplash() }, 600)
                     }
-                    view.evaluateJavascript(AD_BLOCK_JS + HEADER_JS + GAP_JS + NAV_JS + FOOTER_JS + TAB_JS + CONTROL_JS, null)
+                    view.evaluateJavascript(AD_BLOCK_JS + HEADER_JS + GAP_JS + NAV_JS + FOOTER_JS + TAB_JS + TV_FOCUS_JS + CONTROL_JS, null)
                     addressBar.setText(url)
                     this@MainActivity.progress.progress = 100
                     this@MainActivity.progress.visibility = View.GONE
@@ -844,7 +896,7 @@ class MainActivity : Activity() {
                 }
 
                 override fun onProgressChanged(view: WebView, newProgress: Int) {
-                    view.evaluateJavascript(AD_BLOCK_JS + HEADER_JS + GAP_JS + NAV_JS + FOOTER_JS + TAB_JS + CONTROL_JS, null)
+                    view.evaluateJavascript(AD_BLOCK_JS + HEADER_JS + GAP_JS + NAV_JS + FOOTER_JS + TAB_JS + TV_FOCUS_JS + CONTROL_JS, null)
                     this@MainActivity.progress.progress = newProgress
                     if (newProgress >= 100) {
                         this@MainActivity.progress.visibility = View.GONE
