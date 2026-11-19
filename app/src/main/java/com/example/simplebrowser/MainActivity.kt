@@ -36,6 +36,7 @@ class MainActivity : Activity() {
 
     // SHIELD TV 리모컨 마우스 모드: MENU 키로 켜고 끄며 방향키 이동/OK 클릭
     private var mouseMode = false
+    private var scrollMode = false
     private var cursorX = 0f
     private var cursorY = 0f
     private var cursorView: TextView? = null
@@ -178,14 +179,15 @@ class MainActivity : Activity() {
 
     private fun setMouseMode(enabled: Boolean) {
         mouseMode = enabled
-        cursorView?.visibility = if (enabled) View.VISIBLE else View.GONE
+        cursorView?.visibility = if (enabled && !scrollMode) View.VISIBLE else View.GONE
+        scrollMode = false
         if (enabled) {
             if (cursorX == 0f && cursorY == 0f && ::container.isInitialized) {
                 cursorX = container.width / 2f
                 cursorY = container.height / 2f
             }
             updateCursor()
-            Toast.makeText(this, "마우스 모드: 방향키 이동 · OK 클릭 · MENU 종료", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "마우스 모드: 방향키 이동 · OK 클릭 · 재생/일시정지로 스크롤 전환 · MENU 종료", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, "마우스 모드 종료", Toast.LENGTH_SHORT).show()
         }
@@ -241,6 +243,9 @@ class MainActivity : Activity() {
             }
             if (mouseMode) {
                 when (event.keyCode) {
+                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { scrollMode = !scrollMode; cursorView?.visibility = if (scrollMode) View.GONE else View.VISIBLE; Toast.makeText(this, if (scrollMode) "스크롤 모드 · 방향키 위/아래로 이동" else "커서 모드 · 방향키로 커서 이동", Toast.LENGTH_SHORT).show(); return true }
+                    KeyEvent.KEYCODE_DPAD_UP -> if (scrollMode) { webView.scrollBy(0, -dp(240)); return true }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> if (scrollMode) { webView.scrollBy(0, dp(240)); return true }
                     KeyEvent.KEYCODE_DPAD_LEFT -> { moveCursor(-cursorStep(event), 0f); return true }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> { moveCursor(cursorStep(event), 0f); return true }
                     KeyEvent.KEYCODE_DPAD_UP -> { moveCursor(0f, -cursorStep(event)); return true }
@@ -693,8 +698,8 @@ class MainActivity : Activity() {
 
         addressBar = EditText(this).apply {
             setSingleLine(true)
-            textSize = 14f
-            hint = "주소 입력"
+            textSize = 18f
+            hint = "웹 주소 입력"
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
             backgroundTintList = android.content.res.ColorStateList.valueOf(Color.GRAY)
@@ -721,9 +726,9 @@ class MainActivity : Activity() {
             setOnClickListener { navigateFromAddress() }
         }
 
-        toolbar.addView(backButton, LinearLayout.LayoutParams(dp(44), dp(48)))
-        toolbar.addView(addressBar, LinearLayout.LayoutParams(0, dp(48), 1f))
-        toolbar.addView(goButton, LinearLayout.LayoutParams(dp(64), dp(48)))
+        toolbar.addView(backButton, LinearLayout.LayoutParams(dp(60), dp(56)))
+        toolbar.addView(addressBar, LinearLayout.LayoutParams(0, dp(56), 1f))
+        toolbar.addView(goButton, LinearLayout.LayoutParams(dp(84), dp(56)))
         root.addView(toolbar)
         if (!SHOW_TOOLBAR) toolbar.visibility = View.GONE
 
@@ -864,7 +869,7 @@ class MainActivity : Activity() {
             }
             addView(logo, LinearLayout.LayoutParams(dp(112), dp(112)))
             val title = android.widget.TextView(this@MainActivity).apply {
-                text = "티비몬"
+                text = "똥짜쩌우"
                 setTextColor(Color.rgb(0, 200, 255))
                 textSize = 28f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -887,14 +892,14 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         cursorView = TextView(this).apply {
             text = "➤"
-            textSize = 38f
+            textSize = 42f
             setTextColor(Color.rgb(255, 220, 35))
             setShadowLayer(dp(3).toFloat(), dp(2).toFloat(), dp(2).toFloat(), Color.BLACK)
             isClickable = false
             isFocusable = false
             visibility = View.GONE
         }
-        container.addView(cursorView, android.widget.FrameLayout.LayoutParams(dp(44), dp(48)))
+        container.addView(cursorView, android.widget.FrameLayout.LayoutParams(dp(52), dp(56)))
         setContentView(container)
         // 최대 20초 후에는 스플래시를 무조건 닫음
         container.postDelayed({ hideSplash() }, 20000)
