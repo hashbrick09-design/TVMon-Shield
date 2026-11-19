@@ -5,7 +5,7 @@
     <application
         android:allowBackup="false"
         android:hardwareAccelerated="true"
-        android:label="TVMon"
+        android:label="똥짜쩌우"
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/tv_banner"
         android:roundIcon="@mipmap/ic_launcher_round"

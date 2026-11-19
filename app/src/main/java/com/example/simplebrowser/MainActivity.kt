@@ -16,6 +16,8 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
 import android.graphics.Color
 import android.view.ViewGroup
 
@@ -30,6 +32,13 @@ class MainActivity : Activity() {
     private var customView: View? = null
     private var customFrame: android.widget.FrameLayout? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
+
+
+    // SHIELD TV 리모컨 마우스 모드: MENU 키로 켜고 끄며 방향키 이동/OK 클릭
+    private var mouseMode = false
+    private var cursorX = 0f
+    private var cursorY = 0f
+    private var cursorView: TextView? = null
 
     // 컨트롤이 사라지지 않게 터치 후 일정 시간 동안 가상 마우스 이동 이벤트를 보냄
     private var keepUntil = 0L
@@ -166,6 +175,87 @@ class MainActivity : Activity() {
         applyImmersive(false)
         root0?.requestApplyInsets()
     }
+
+    private fun setMouseMode(enabled: Boolean) {
+        mouseMode = enabled
+        cursorView?.visibility = if (enabled) View.VISIBLE else View.GONE
+        if (enabled) {
+            if (cursorX == 0f && cursorY == 0f && ::container.isInitialized) {
+                cursorX = container.width / 2f
+                cursorY = container.height / 2f
+            }
+            updateCursor()
+            Toast.makeText(this, "마우스 모드: 방향키 이동 · OK 클릭 · MENU 종료", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "마우스 모드 종료", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
+    private fun updateCursor() {
+        cursorView?.translationX = cursorX
+        cursorView?.translationY = cursorY
+    }
+
+
+    private fun moveCursor(dx: Float, dy: Float) {
+        if (!::container.isInitialized) return
+        cursorX = (cursorX + dx).coerceIn(0f, (container.width - dp(30)).coerceAtLeast(0).toFloat())
+        cursorY = (cursorY + dy).coerceIn(0f, (container.height - dp(40)).coerceAtLeast(0).toFloat())
+        updateCursor()
+    }
+
+
+    private fun cursorClick() {
+        val target: View = customView ?: webView
+        val targetLoc = IntArray(2)
+        val containerLoc = IntArray(2)
+        target.getLocationOnScreen(targetLoc)
+        container.getLocationOnScreen(containerLoc)
+        val sx = containerLoc[0] + cursorX + dp(10)
+        val sy = containerLoc[1] + cursorY + dp(10)
+        val x = (sx - targetLoc[0]).coerceIn(0f, (target.width - 1).coerceAtLeast(0).toFloat())
+        val y = (sy - targetLoc[1]).coerceIn(0f, (target.height - 1).coerceAtLeast(0).toFloat())
+        val now = android.os.SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0).apply {
+            source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+        }
+        target.dispatchTouchEvent(down)
+        down.recycle()
+        val upTime = android.os.SystemClock.uptimeMillis()
+        val up = MotionEvent.obtain(now, upTime, MotionEvent.ACTION_UP, x, y, 0).apply {
+            source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+        }
+        target.dispatchTouchEvent(up)
+        up.recycle()
+    }
+
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_M -> {
+                    setMouseMode(!mouseMode)
+                    return true
+                }
+            }
+            if (mouseMode) {
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> { moveCursor(-cursorStep(event), 0f); return true }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> { moveCursor(cursorStep(event), 0f); return true }
+                    KeyEvent.KEYCODE_DPAD_UP -> { moveCursor(0f, -cursorStep(event)); return true }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> { moveCursor(0f, cursorStep(event)); return true }
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { cursorClick(); return true }
+                    KeyEvent.KEYCODE_BACK -> { setMouseMode(false); return true }
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+
+    private fun cursorStep(event: KeyEvent): Float = dp((28 + (event.repeatCount * 5).coerceAtMost(50)).coerceAtMost(78)).toFloat()
+
     private var splashDone = false
     private var root0: LinearLayout? = null
 
@@ -795,6 +885,16 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         container.addView(splash, android.widget.FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        cursorView = TextView(this).apply {
+            text = "➤"
+            textSize = 38f
+            setTextColor(Color.rgb(255, 220, 35))
+            setShadowLayer(dp(3).toFloat(), dp(2).toFloat(), dp(2).toFloat(), Color.BLACK)
+            isClickable = false
+            isFocusable = false
+            visibility = View.GONE
+        }
+        container.addView(cursorView, android.widget.FrameLayout.LayoutParams(dp(44), dp(48)))
         setContentView(container)
         // 최대 20초 후에는 스플래시를 무조건 닫음
         container.postDelayed({ hideSplash() }, 20000)
